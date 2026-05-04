@@ -26,11 +26,9 @@ It is built for polyglot project generation inside the local projects folder, wi
 
 - Python 3.12+
 - A running Ollama-compatible backend reachable by LangChain Ollama
-- Access to the configured model in main.py
+- The configured model available locally via Ollama
 
-Current model configuration in the code:
-
- qwen3-coder:480b-cloud
+Current model configuration: **qwen3-coder:480b** (defined in `kestrel/constants.py` as `AGENT_FLYING_ON`)
 
 ## Quick Start
 
@@ -46,11 +44,12 @@ If you prefer plain pip in the existing virtual environment:
 
 ## Commands
 
-- <request> : create a new project from your request
-- /list : list projects in the local nest
-- /extend <slug> : make the next request modify an existing project
-- /help : print command reference
-- /exit : quit
+- `<request>` : create a new project from your request
+- `/list` : list projects in the local nest
+- `/extend <slug>` : make the next request modify an existing project
+- `/help` : print command reference
+- `/exit` : quit
+- `Ctrl+O` : toggle streamed thinking on or off during the interactive session
 
 ## Typical Workflow
 
@@ -60,15 +59,46 @@ If you prefer plain pip in the existing virtual environment:
     build a rust cli todo app with sqlite and tests
 
 3. Let Kestrel run through stages (hover, lock, circle, stoop, strike, perch)
-4. Inspect generated files under projects/<project-slug>
-5. If needed, use /extend <project-slug> and ask for changes
+4. Inspect generated files under projects/`project-slug`
+5. If needed, use /extend `project-slug` and ask for changes
+6. Press Ctrl+O at any prompt to redraw the terminal transcript with thinking hidden or visible
 
 ## Repository Layout
 
-- main.py : the full agent pipeline and CLI
-- pyproject.toml : package metadata and dependencies
-- uv.lock : pinned dependency lockfile
-- projects/ : generated and user-extended projects
+```
+main.py                     # Entry point (thin wrapper)
+pyproject.toml              # Package metadata and dependencies
+uv.lock                     # Pinned dependency lockfile
+projects/                   # Generated and user-extended projects
+
+kestrel/                    # Main package
+├── __init__.py             # Package initialization
+├── constants.py            # Centralized configuration (model, colors, stages, regex, language hints)
+├── utils.py                # Utility functions (file I/O, parsing, verification, console output)
+├── model.py                # LLM interface wrapper (ChatOllama with streaming)
+├── prompts.py              # All system prompts for LLM (7 stages: clarify → build → review)
+├── pipeline.py             # Core orchestration (stage functions and run_pipeline)
+└── cli.py                  # Command-line interface
+```
+
+## Architecture
+
+Kestrel follows strict OOP principles with clear separation of concerns:
+
+- **constants.py**: Centralized configuration (model name, colors, stages, regex patterns, language hints). Single source of truth.
+- **utils.py**: Pure utility functions for file I/O, parsing LLM output, language detection, build verification, and console formatting.
+- **model.py**: LLM interface wrapping ChatOllama with streaming support. Uses `AGENT_FLYING_ON` from constants.
+- **prompts.py**: All system prompts for the 7-stage pipeline (clarify, plan, critique, build, fix, review).
+- **pipeline.py**: Core orchestration logic. Imports from constants/utils/model/prompts—no duplicate logic.
+- **cli.py**: Command-line interface. Simple argument parsing and entry point.
+- **main.py**: Thin wrapper that imports and calls the CLI.
+
+This structure ensures:
+
+- No code duplication
+- No hardcoded values (all in constants.py)
+- Easy testing and maintenance
+- Clear data flow and dependencies
 
 ## Verification Behavior
 
