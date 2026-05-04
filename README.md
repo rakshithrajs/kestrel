@@ -65,7 +65,7 @@ If you prefer plain pip in the existing virtual environment:
 
 ## Repository Layout
 
-```
+```markdown
 main.py                     # Entry point (thin wrapper)
 pyproject.toml              # Package metadata and dependencies
 uv.lock                     # Pinned dependency lockfile

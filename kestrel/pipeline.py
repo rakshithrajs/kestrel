@@ -44,13 +44,16 @@ def quip(pool: list[str]) -> str:
     return _quip(pool)
 
 
-def stage_clarify(user_request: str, show_thinking: bool) -> List[str]:
+def stage_clarify(
+    user_request: str, show_thinking: list[bool], on_ctrl_o: Callable[[], None] | None = None
+) -> List[str]:
     out = stream_model(
         CLARIFY_SYSTEM,
         f"REQUEST:\n{user_request}",
         label="hover",
         color=C.SKY,
         show_thinking=show_thinking,
+        on_ctrl_o=on_ctrl_o,
     )
     try:
         match = re.search(r"\{.*\}", out, re.DOTALL)
@@ -83,8 +86,13 @@ def ask_clarifications(
 
 
 def stage_plan(
-    user_request: str, prior_issues: str = "", show_thinking: bool = True
+    user_request: str,
+    prior_issues: str = "",
+    show_thinking: list[bool] | None = None,
+    on_ctrl_o: Callable[[], None] | None = None,
 ) -> str:
+    if show_thinking is None:
+        show_thinking = [False]
     user_content = f"USER REQUEST:\n{user_request}"
     if prior_issues:
         user_content += f"\n\nPREVIOUS PLAN ISSUES — fix these:\n{prior_issues}"
@@ -94,10 +102,18 @@ def stage_plan(
         label="lock",
         color=C.AMBER,
         show_thinking=show_thinking,
+        on_ctrl_o=on_ctrl_o,
     )
 
 
-def stage_plan_extend(user_request: str, project_path: str, show_thinking: bool) -> str:
+def stage_plan_extend(
+    user_request: str,
+    project_path: str,
+    show_thinking: list[bool] | None = None,
+    on_ctrl_o: Callable[[], None] | None = None,
+) -> str:
+    if show_thinking is None:
+        show_thinking = [False]
     files = list_project_files(project_path)
     summary = f"PROJECT PATH: {project_path}\nEXISTING FILES:\n"
     summary += "\n".join(f"- {f}" for f in files)
@@ -114,12 +130,18 @@ def stage_plan_extend(user_request: str, project_path: str, show_thinking: bool)
         label="lock·extend",
         color=C.AMBER,
         show_thinking=show_thinking,
+        on_ctrl_o=on_ctrl_o,
     )
 
 
 def stage_critique(
-    user_request: str, plan: str, show_thinking: bool
+    user_request: str,
+    plan: str,
+    show_thinking: list[bool] | None = None,
+    on_ctrl_o: Callable[[], None] | None = None,
 ) -> Tuple[bool, str]:
+    if show_thinking is None:
+        show_thinking = [False]
     user_content = f"USER REQUEST:\n{user_request}\n\nPLAN:\n{plan}"
     out = stream_model(
         CRITIC_SYSTEM,
@@ -127,21 +149,27 @@ def stage_critique(
         label="circle",
         color=C.SLATE,
         show_thinking=show_thinking,
+        on_ctrl_o=on_ctrl_o,
     )
     approved = "VERDICT: APPROVED" in out and "NEEDS_REVISION" not in out
     return approved, out
 
 
 def stage_build_iterative(
-    plan: str, project_path: str, show_thinking: bool
+    plan: str,
+    project_path: str,
+    show_thinking: list[bool] | None = None,
+    on_ctrl_o: Callable[[], None] | None = None,
 ) -> List[str]:
+    if show_thinking is None:
+        show_thinking = [False]
     planned_files = extract_planned_files(plan)
     if not planned_files:
         cprint(
             f"  {C.BLOOD}∙ couldn't read FILES section — diving once for everything.{C.RESET}",
             "",
         )
-        return _stage_build_oneshot(plan, project_path, show_thinking)
+        return _stage_build_oneshot(plan, project_path, show_thinking, on_ctrl_o=on_ctrl_o)
 
     cprint(f"  {C.DIM}∙ targets:{C.RESET} {C.RUST}{len(planned_files)}{C.RESET}", "")
     written: List[str] = []
@@ -178,6 +206,7 @@ def stage_build_iterative(
             label=f"stoop·{target}",
             color=C.RUST,
             show_thinking=show_thinking,
+            on_ctrl_o=on_ctrl_o,
         )
         log_stage(project_path, f"build_{slugify(target).replace('/', '_')}", out)
 
@@ -205,14 +234,20 @@ def stage_build_iterative(
 
 
 def _stage_build_oneshot(
-    plan: str, project_path: str, show_thinking: bool
+    plan: str,
+    project_path: str,
+    show_thinking: list[bool] | None = None,
+    on_ctrl_o: Callable[[], None] | None = None,
 ) -> List[str]:
+    if show_thinking is None:
+        show_thinking = [False]
     out = stream_model(
         BUILDER_FILE_SYSTEM + "\n(You may output multiple file blocks.)",
         f"PLAN:\n{plan}\n\nWrite all files in the FILES section.",
         label="stoop·all",
         color=C.RUST,
         show_thinking=show_thinking,
+        on_ctrl_o=on_ctrl_o,
     )
     log_stage(project_path, "build_oneshot", out)
     blocks = parse_file_blocks(out)
@@ -228,8 +263,14 @@ def _stage_build_oneshot(
 
 
 def stage_fix(
-    plan: str, project_path: str, error_output: str, show_thinking: bool
+    plan: str,
+    project_path: str,
+    error_output: str,
+    show_thinking: list[bool] | None = None,
+    on_ctrl_o: Callable[[], None] | None = None,
 ) -> List[str]:
+    if show_thinking is None:
+        show_thinking = [False]
     files = list_project_files(project_path)
     parts = [f"PLAN:\n{plan}", "\nFILE TREE:\n" + "\n".join(f"- {f}" for f in files)]
     parts.append("\nFILE CONTENTS:")
@@ -262,6 +303,7 @@ def stage_fix(
         label="adjust",
         color=C.PLUM,
         show_thinking=show_thinking,
+        on_ctrl_o=on_ctrl_o,
     )
     log_stage(project_path, "fix", out)
     blocks = parse_file_blocks(out)
@@ -284,8 +326,11 @@ def stage_review(
     plan: str,
     files: List[str],
     verification: VerificationResult,
-    show_thinking: bool,
+    show_thinking: list[bool] | None = None,
+    on_ctrl_o: Callable[[], None] | None = None,
 ) -> Tuple[bool, str]:
+    if show_thinking is None:
+        show_thinking = [False]
     file_list = "\n".join(f"- {f}" for f in files)
     verify_str = (
         f"verification command: {verification.command}\n"
@@ -302,6 +347,7 @@ def stage_review(
         label="perch",
         color=C.SAGE,
         show_thinking=show_thinking,
+        on_ctrl_o=on_ctrl_o,
     )
     approved = "VERDICT: APPROVED" in out and "NEEDS_FIXES" not in out
     return approved, out
@@ -311,16 +357,20 @@ def run_pipeline(
     user_request: str,
     projects_base: str,
     existing_project: str | None = None,
-    show_thinking: bool = False,
+    show_thinking: list[bool] | None = None,
     on_ctrl_o: Callable[[], None] | None = None,
     max_plan_revisions: int = 2,
     max_fix_rounds: int = 3,
 ) -> None:
+    if show_thinking is None:
+        show_thinking = [False]
     extending = existing_project is not None
 
     if not extending:
         stage_header("hover")
-        questions = stage_clarify(user_request, show_thinking=show_thinking)
+        questions = stage_clarify(
+            user_request, show_thinking=show_thinking, on_ctrl_o=on_ctrl_o
+        )
         if questions:
             extras = ask_clarifications(questions, on_ctrl_o=on_ctrl_o)
             if extras:
@@ -338,27 +388,32 @@ def run_pipeline(
     if extending:
         project_path = os.path.join(projects_base, existing_project)  # type: ignore[arg-type]
         plan = stage_plan_extend(
-            user_request, project_path, show_thinking=show_thinking
+            user_request, project_path, show_thinking=show_thinking, on_ctrl_o=on_ctrl_o
         )
     else:
         project_path = ""
-        plan = stage_plan(user_request, show_thinking=show_thinking)
+        plan = stage_plan(
+            user_request, show_thinking=show_thinking, on_ctrl_o=on_ctrl_o
+        )
 
     if not extending:
         stage_header("circle")
         approved, critic_out = stage_critique(
-            user_request, plan, show_thinking=show_thinking
+            user_request, plan, show_thinking=show_thinking, on_ctrl_o=on_ctrl_o
         )
         revisions = 0
         while not approved and revisions < max_plan_revisions:
             revisions += 1
             stage_header("lock", f"revision {revisions}")
             plan = stage_plan(
-                user_request, prior_issues=critic_out, show_thinking=show_thinking
+                user_request,
+                prior_issues=critic_out,
+                show_thinking=show_thinking,
+                on_ctrl_o=on_ctrl_o,
             )
             stage_header("circle", f"revision {revisions}")
             approved, critic_out = stage_critique(
-                user_request, plan, show_thinking=show_thinking
+                user_request, plan, show_thinking=show_thinking, on_ctrl_o=on_ctrl_o
             )
         if not approved:
             cprint(
@@ -377,7 +432,9 @@ def run_pipeline(
     log_stage(project_path, "00_request", user_request)
     log_stage(project_path, "01_plan", plan)
 
-    written = stage_build_iterative(plan, project_path, show_thinking=show_thinking)
+    written = stage_build_iterative(
+        plan, project_path, show_thinking=show_thinking, on_ctrl_o=on_ctrl_o
+    )
     if not written:
         cprint(f"\n  {C.BLOOD}{GLYPH} stoop returned empty. abort.{C.RESET}", "")
         return
@@ -419,7 +476,11 @@ def run_pipeline(
         fix_round += 1
         stage_header("adjust", f"pass {fix_round}/{max_fix_rounds}")
         changed = stage_fix(
-            plan, project_path, verification.output, show_thinking=show_thinking
+            plan,
+            project_path,
+            verification.output,
+            show_thinking=show_thinking,
+            on_ctrl_o=on_ctrl_o,
         )
         if not changed:
             cprint(
@@ -429,7 +490,9 @@ def run_pipeline(
 
     stage_header("perch")
     actual_files = list_project_files(project_path)
-    stage_review(plan, actual_files, verification, show_thinking=show_thinking)
+    stage_review(
+        plan, actual_files, verification, show_thinking=show_thinking, on_ctrl_o=on_ctrl_o
+    )
 
     summary_bar = "═" * 60
     cprint(f"\n{summary_bar}", C.SAGE)

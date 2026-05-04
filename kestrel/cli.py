@@ -10,6 +10,7 @@ from .pipeline import run_pipeline
 from .model import ModelUnavailableError
 from .utils import (
     cprint,
+    clear_screen,
     list_project_files,
     read_interactive_line,
     set_cprint_recorder,
@@ -49,10 +50,7 @@ class TranscriptBuffer:
     def redraw(self, show_thinking: bool) -> None:
         self.recording_enabled = False
         try:
-            if os.name == "nt":
-                os.system("cls")
-            else:
-                sys.stdout.write("\033[2J\033[H")
+            clear_screen()
             for entry in self.entries:
                 if entry.kind == "thinking" and not show_thinking:
                     continue
@@ -138,7 +136,7 @@ def choose_existing_project(on_ctrl_o=None) -> str | None:
 def main() -> None:
     """Main interactive CLI loop."""
     transcript = TranscriptBuffer()
-    show_thinking = False
+    show_thinking = [False]
     pending_extend: str | None = None
     task_count = 0
 
@@ -146,11 +144,10 @@ def main() -> None:
         set_cprint_recorder(transcript.record)
 
     def toggle_thinking() -> None:
-        nonlocal show_thinking
-        show_thinking = not show_thinking
-        transcript.redraw(show_thinking)
+        show_thinking[0] = not show_thinking[0]
+        transcript.redraw(show_thinking[0])
         cprint(
-            f"  {C.DIM}thinking:{C.RESET} {C.AMBER}{'on' if show_thinking else 'off'}{C.RESET}  {C.DIM}(Ctrl+O toggles){C.RESET}",
+            f"  {C.DIM}thinking:{C.RESET} {C.AMBER}{'on' if show_thinking[0] else 'off'}{C.RESET}  {C.DIM}(Ctrl+O toggles){C.RESET}",
             "",
         )
 

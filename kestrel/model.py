@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+from typing import Callable
+
 import httpx
 from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -22,8 +25,12 @@ def stream_model(
     user_content: str,
     label: str = "",
     color: str = C.AMBER,
-    show_thinking: bool = True,
+    show_thinking: list[bool] | None = None,
+    on_ctrl_o: Callable[[], None] | None = None,
 ) -> str:
+    if show_thinking is None:
+        show_thinking = [False]
+
     msgs = [SystemMessage(content=system_prompt), HumanMessage(content=user_content)]
 
     output_parts: list[str] = []
@@ -32,6 +39,18 @@ def stream_model(
 
     try:
         for chunk in model.stream(msgs):
+            # Poll for Ctrl+O on Windows during streaming
+            if os.name == "nt" and on_ctrl_o is not None:
+                import msvcrt
+
+                while msvcrt.kbhit():
+                    ch = msvcrt.getwch()
+                    if ch == "\x0f":
+                        on_ctrl_o()
+                    elif ch in ("\x00", "\xe0"):
+                        if msvcrt.kbhit():
+                            msvcrt.getwch()  # discard extended key code
+
             thinking = ""
             if hasattr(chunk, "additional_kwargs") and chunk.additional_kwargs:
                 thinking = (
@@ -40,12 +59,13 @@ def stream_model(
                     or ""
                 )
             if thinking:
+                should_emit = show_thinking[0]
                 if not thinking_open:
                     cprint(
                         f"\n  {C.DIM}{C.ITAL}∴ {label} · thinking{C.RESET}",
                         "",
                         kind="thinking",
-                        emit=show_thinking,
+                        emit=should_emit,
                     )
                     thinking_open = True
                 cprint(
@@ -54,7 +74,7 @@ def stream_model(
                     end="",
                     flush=True,
                     kind="thinking",
-                    emit=show_thinking,
+                    emit=should_emit,
                 )
 
             text = chunk.content if hasattr(chunk, "content") else ""

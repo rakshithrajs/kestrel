@@ -25,6 +25,51 @@ from .constants import (
 _CPRINT_RECORDER: Callable[[str, str, str, str, bool], None] | None = None
 
 
+def clear_screen() -> None:
+    """Clear the terminal screen in a cross-platform way."""
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            kernel32 = ctypes.windll.kernel32
+            hStdOut = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+
+            csbi = ctypes.create_string_buffer(22)
+            res = kernel32.GetConsoleScreenBufferInfo(hStdOut, csbi)
+            if res:
+                import struct
+
+                (
+                    _, _, _, _, wattr,
+                    left, top, right, bottom,
+                    _, _,
+                ) = struct.unpack("hhhhHhhhhhh", csbi.raw)
+                columns = right - left + 1
+                rows = bottom - top + 1
+
+                written = wintypes.DWORD()
+                coord = wintypes._COORD(0, 0)
+                kernel32.FillConsoleOutputCharacterA(
+                    hStdOut, ord(" "), columns * rows, coord, ctypes.byref(written)
+                )
+                kernel32.FillConsoleOutputAttribute(
+                    hStdOut, wattr, columns * rows, coord, ctypes.byref(written)
+                )
+                kernel32.SetConsoleCursorPosition(hStdOut, coord)
+                return
+        except Exception:
+            pass
+        try:
+            sys.stdout.write("\033[2J\033[H")
+            sys.stdout.flush()
+        except Exception:
+            os.system("cls")
+    else:
+        sys.stdout.write("\033[2J\033[H")
+        sys.stdout.flush()
+
+
 def set_cprint_recorder(
     recorder: Callable[[str, str, str, str, bool], None] | None,
 ) -> None:
